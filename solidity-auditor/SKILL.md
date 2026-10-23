@@ -1,6 +1,6 @@
 ---
 name: solidity-auditor
-description: Security audit of Solidity code while you develop. Trigger on "audit", "check this contract", "review for security", "loop mode", "run the auditor in loop mode", "run 3 passes". Modes - default (full repo) or a specific filename. Loop mode runs several passes in one scan, each pass told what the earlier ones found, and ends in one combined report; it remembers findings between scans in a ledger.
+description: Security audit of Solidity code while you develop. Trigger on "audit", "check this contract", "review for security", "loop mode", "run the auditor in loop mode", "run 3 passes". Modes - default (full repo) or a specific filename. Loop mode runs several passes in one scan, each pass told what the earlier ones found, and ends in one combined report; it remembers findings between scans in a ledger. Runs unattended: it never asks a question, and the pass count defaults to 3 (`--loop N` overrides).
 ---
 
 # Smart Contract Security Audit
@@ -35,7 +35,7 @@ You are the orchestrator of a parallelized smart contract security audit.
   > **Line 33 used to read "Never write a report file unless explicitly passed", and that is now false.** The rule was written to protect the runner's **working directory**, and that protection is unchanged: without the flag, nothing is written outside `.solidity-auditor/`. What changed is that the report is assembled by shell on every scan, so the flag can no longer collapse the report — nothing regenerates, it copies. A later editor must not read this as a mistake and revert it.
 
 - `--memory` (off by default): remember findings between scans in a ledger at `.solidity-auditor/memory.tsv` in the audited repo. Any pass count above 1 turns memory on by itself, whether or not the flag was passed.
-- `--loop [N]` (off by default): run N passes in one scan, each pass told what the earlier ones found, ending in one combined report. `--loop` with no number is **3** passes. `--loop 1` is a 1-pass scan. The flag exists for runners who prefer flags; when it is passed the picker in Turn 1b does not ask, it obeys.
+- `--loop [N]` — the explicit pass-count override: run N passes in one scan, each pass told what the earlier ones found, ending in one combined report. `--loop` with no number is **3** passes. `--loop 1` is a 1-pass scan — the only 1-pass scan there is, now that the default is 3 (Turn 1b).
 
 **Vocabulary (used throughout this file):**
 
@@ -46,9 +46,9 @@ The ledger's `scans` column counts scans. The report's `seen in k/N runs` counts
 
 The pass count the scan runs is `{passes}` — settled in Turn 1b, 1 or more. The **loop body** is Turn 2 step 2c, Turn 2 step 3, Turn 3a, Turn 3b and Turn 4, and it runs once per pass. Everything before it runs once per scan, and Turn 5 closes the scan once, whatever `{passes}` is.
 
-> **HARD RULE — the plain path must stay plain.** A 1-pass scan with no flags reaches **none** of the memory steps: not Turn 1c, not Turn 2 step 2, not Turn 4 step 4, not Turn 4 step 6. It reads no ledger, writes no file anywhere, and prints exactly the report it printed before memory existed. Memory is on only when `--memory` was passed or the pass count is above 1. A later editor who is tempted to make any memory step unconditional is breaking this on purpose, not tidying up.
+> **HARD RULE — the 1-pass path must stay plain.** A 1-pass scan — `--loop 1`, or an explicit one-pass request; with the default at 3 there is no other route to one — reaches **none** of the memory steps: not Turn 1c, not Turn 2 step 2, not Turn 4 step 4, not Turn 4 step 6. It reads no ledger, writes no `mem_` key, and prints exactly the report it printed before memory existed. Memory is on only when `--memory` was passed or the pass count is above 1. A later editor who is tempted to make any memory step unconditional is breaking this on purpose, not tidying up.
 
-> **A 1-pass answer reaches none of the loop or memory machinery.** No ledger is read or written. No `Passes` or `Memory` row in the Scope table. No `seen in k/N runs`. No `KNOWN` / `NEW` tag. No per-pass summary lines. **The printed report is the report this skill printed before loop mode existed.** The only trace of the picker is the question itself.
+> **A 1-pass answer reaches none of the loop or memory machinery.** No ledger is read or written. No `Passes` or `Memory` row in the Scope table. No `seen in k/N runs`. No `KNOWN` / `NEW` tag. No per-pass summary lines. **The printed report is the report this skill printed before loop mode existed.** One pass happens only when the runner asked for it by name — there is no picker and no question, and nothing in the output records how `{passes}` was settled.
 >
 > **What it does write.** Every scan writes `.solidity-auditor/runs/{stamp}/` — one `run-1.md`, one `scope.tsv`, one `queue-1.tsv`, one `full-report.md` — because the report is assembled from those files at every pass count, and `name`, `mode`, `files` and `threshold` are needed by every report. This paragraph used to say a 1-pass answer creates no `.solidity-auditor/` directory and no `runs/` files; that is now false, and it was never what the rule was protecting.
 >
@@ -95,103 +95,31 @@ If the remote VERSION fetch succeeds, compare the two as **numbers** and warn **
 
 > **Lower, not different.** A plain "differs" test warns the wrong person: somebody working on an unreleased version has a local `VERSION` **above** the published one, and gets told to upgrade to the version they are writing. Local equal to remote, or local above it, prints nothing.
 
-**Turn 1b — Pass count.** This turn asks **one question in one `AskUserQuestion` call**: how many passes the scan runs. The runner is interrupted once, before any work starts.
+**Turn 1b — Pass count.** This turn settles how many passes the scan runs, from the invocation alone. **The scan never stops to ask the runner anything** — the pass question this turn used to ask, and the printed fallback that stopped and waited for an answer, were removed on purpose: a default of 3 already answers the question, and an unattended run must not block on it.
 
-> **There is no model question, and that is deliberate.** The 12 agents run on the runtime's default model — Turn 3a omits the `model` parameter on every Agent call, so whatever model the orchestrator itself runs on is what the agents use. A later editor must not add a model picker back: it was removed on purpose, and reintroducing it would burn the runner's one interruption on a question with a safe default. The **pass** question has no safe default: on a runtime without `AskUserQuestion` it falls through to the printed block in Turn 1b-ii, which stops and waits. This turn as a whole is never skipped. A later editor must not restore a blanket "SKIP this turn entirely" rule.
+> **There is no model question and no pass question, and both are deliberate.** The 12 agents run on the runtime's default model — Turn 3a omits the `model` parameter on every Agent call, so whatever model the orchestrator itself runs on is what the agents use. A later editor must not add a model picker back: the agents have a safe default, and a question about them would block an unattended run to collect an answer the default already carries. The pass question is gone for the same reason — it was the runner's one interruption, and the default of 3 replaced it. A runner who wants a different count says so at invocation, and explicit numbers always win (Turn 1b-i). This turn as a whole is never skipped: the resolution rules run on every scan, even though none of them asks.
 
-**Turn 1b-i — the `AskUserQuestion` call (Claude Code).** Ask the pass question:
+**Turn 1b-i — resolve `{passes}` from the invocation.** No question is asked, on any runtime — this table is the whole resolution:
 
-1. Question: `"How many passes should this audit run? Each pass is a full 12-agent audit, and every pass after the first is told what the earlier ones found, so it hunts new ground. You get one combined report at the end."`
-
-   Three single-select options, `3 passes` first and marked `(Recommended)`. Each carries a `preview` box in this turn's style — **60 characters wide**, all three equal. Set `preview` verbatim, whitespace preserved:
-
-   | Label | `description` |
-   | --- | --- |
-   | `3 passes (Recommended)` | `~1.5 h` |
-   | `1 pass` | `~30 min` |
-   | `5 passes` | `~2.5 h` |
-
-   3 passes preview:
-
-   ```
-   ┌──────────────────────────────────────────────────────────┐
-   │  3 passes  ·  each pass hunts new ground  ·  ~1.5 h      │
-   └──────────────────────────────────────────────────────────┘
-   ```
-
-   1 pass preview:
-
-   ```
-   ┌──────────────────────────────────────────────────────────┐
-   │  1 pass  ·  today's audit  ·  ~30 min, nothing written   │
-   └──────────────────────────────────────────────────────────┘
-   ```
-
-   5 passes preview:
-
-   ```
-   ┌──────────────────────────────────────────────────────────┐
-   │  5 passes  ·  deepest sweep  ·  ~2.5 h                   │
-   └──────────────────────────────────────────────────────────┘
-   ```
-
-   > **Two clocks are in play, and only one of them is measured.** The numbers in the option
-   > previews above (`~30 min`, `~1.5 h`, `~2.5 h`) are **derived estimates for the 3-slot
-   > queue this skill now runs** — twelve agents through three slots is about four agent-times
-   > end to end, not one — and they are not measurements. The measurement below was taken with
-   > **all twelve agents running at once**, a width this skill no longer uses; read it as the
-   > per-agent speed and the floor, not as the wall clock to expect. When a real 3-slot scan
-   > completes, re-measure and correct both clocks here rather than adding a third estimate
-   > somewhere else.
-   >
-   > **The measurement, and it is a floor.** A real 3-pass scan of 2,228 lines of Solidity
-   > across 10 files, 12 agents per pass on Opus **all running at once**, took **43 minutes**
-   > wall clock: 11 minutes for pass 1 and about 16 for each of passes 2 and 3, which run
-   > slower because the growing `known-findings.md` is appended to all twelve bundles.
-   > Individual agents ran 3.5–11 minutes. A larger codebase takes longer; a smaller model is
-   > faster. Quote minutes rather than multipliers — "~3x time" told the runner nothing about
-   > whether to wait or come back after lunch.
-
-2. **Any other number needs no option of its own.** `AskUserQuestion` always adds an **Other** choice with a free-text box, and the runner types their number there. Do NOT add a fourth option reading "your own number" — options are fixed choices, so it could not collect the number and would dead-end.
-
-   Parse the Other answer for the first integer. Below 1 or above 10 → ask once more. A second unusable answer → **1 pass**.
-
-3. Store the answer as `{passes}`. No answer at all → 1 pass.
-
-**Turn 1b-ii — the printed fallback (every runtime without `AskUserQuestion`).** Print this exactly:
-
-```
-How many passes should this audit run?
-
-Each pass is a full 12-agent audit. Every pass after the first is told what the
-earlier passes found, so it hunts new ground. You get one combined report at the end.
-
-  1) 1 pass    — today's audit, about 30 minutes. Nothing is written to disk.
-  2) 3 passes  — recommended. About 1.5 hours.
-  3) 5 passes  — deepest sweep. About 2.5 hours.
-
-Answer with 1, 2, 3, or any pass count you want.
-```
-
-> **STOP here and wait for the runner's answer.** Do NOT choose for them. Do NOT continue to Turn 2 with an assumed pass count. Do NOT start the scan and ask later.
->
-> This is the one place in this skill where a question is emitted as prose. Turn 1b forbids prose questions elsewhere; the pass count earns the exception because it has no safe default: 1 and 5 differ by 5x in time and in cost, and that is the runner's money. A later editor must not "fix" this by deleting the prose block or by picking a default. If you are reading this and it looks like an inconsistency, it is deliberate.
-
-Answers `1`, `2` and `3` are the three listed choices; any other integer is that many passes. Apply the same bounds as Turn 1b-i step 2 — below 1 or above 10, ask once more, then 1 pass.
-
-**Turn 1b-iii — when the runner already said.** Ask nothing that has already been answered:
-
-| What arrived | What the picker does |
+| What arrived | `{passes}` |
 | --- | --- |
-| `--loop 5` | Skip the pass question, silently. 5 passes. |
-| `--loop` with no number | Skip the pass question, silently. 3 passes. |
-| "run 4 passes", "audit this four times" | Skip the pass question, silently. 4 passes. |
-| "loop mode", "run it a few times" — a request with no number | **Ask.** They asked for the feature, not for a count. |
-| Nothing | Ask. |
+| `--loop 5` | 5 |
+| "run 4 passes", "audit this four times" | 4 |
+| `--loop` with no number | 3 |
+| "loop mode", "run it a few times" — a request with no number | 3 |
+| Nothing | **3 — the default** |
 
-Skipping is silent in the first three rows — printing `using 5 passes` back at somebody who just typed `--loop 5` is noise.
+An explicit number is **clamped into 1..10**: below 1 runs as 1, above 10 runs as 10. When a clamp fires, print one line (`clamped: 50 passes → 10`) so an unattended log shows it; print nothing for ordinary resolutions — `using 3 passes` at somebody who just asked for an audit is noise.
 
-**Turn 1b-iv — record the pass count.** However `{passes}` was settled — asked, typed in the prose fallback, or read off a flag — write it once, here:
+> **The default turns memory on.** 3 is above 1, and any pass count above 1 turns memory on by itself (the `--memory` flag's own rule), so a plain invocation now reads and writes the ledger. The plain no-ledger scan still exists, by name: `--loop 1`.
+
+**Turn 1b-ii — what the count costs.** For orientation, not a promise: 1 pass ≈ 30 min, 3 passes ≈ 1.5 h, 5 passes ≈ 2.5 h.
+
+> **Two clocks are in play, and only one of them is measured.** The numbers above (`~30 min`, `~1.5 h`, `~2.5 h`) are **derived estimates for the 3-slot queue this skill now runs** — twelve agents through three slots is about four agent-times end to end, not one — and they are not measurements. The measurement below was taken with **all twelve agents running at once**, a width this skill no longer uses; read it as the per-agent speed and the floor, not as the wall clock to expect. When a real 3-slot scan completes, re-measure and correct both clocks here rather than adding a third estimate somewhere else.
+>
+> **The measurement, and it is a floor.** A real 3-pass scan of 2,228 lines of Solidity across 10 files, 12 agents per pass on Opus **all running at once**, took **43 minutes** wall clock: 11 minutes for pass 1 and about 16 for each of passes 2 and 3, which run slower because the growing `known-findings.md` is appended to all twelve bundles. Individual agents ran 3.5–11 minutes. A larger codebase takes longer; a smaller model is faster. Quote minutes rather than multipliers — "~3x time" told the runner nothing about whether to wait or come back after lunch.
+
+**Turn 1b-iii — record the pass count.** However `{passes}` was settled — an explicit number from the invocation, or the default of 3 — write it once, here:
 
 ```bash
 printf '%s\t%s\n' passes_planned "{passes}" >> .solidity-auditor/runs/{stamp}/scope.tsv
