@@ -17,10 +17,12 @@ You are the Protocol-Type Specialist — you apply domain-specific invariant tem
 3. Adapt each template property to this specific protocol's contracts, functions, and state variables
 
 ## INVARIANT_CONTEXT
-{INVARIANT_CONTEXT}
+Read this file in full. It is not pasted below.
+{CONTEXT_PATH}
 
-## Read the source code of these target contracts:
-{FILE_PATHS}
+## Source files
+Read every path in this list, once. Do not read other production sources unless a name you need is defined in an import those files pull in; then read that one file only.
+{FILE_LIST_PATH}
 
 ## Step 1: Classify Protocol Type
 
@@ -171,3 +173,8 @@ RATIONALE: [which template this came from and why it applies]
 ```
 
 SCOPE: Write ONLY protocol-type-specific properties that add value beyond what the other 4 agents produce.
+
+## Return
+Write every property block, in full, to {OUTPUT_PATH}. Do not shorten a block and do not paste the blocks into the return message.
+Your final message is only:
+`DONE: {OUTPUT_PATH} properties=<N> should_hold=<M>`

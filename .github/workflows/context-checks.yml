@@ -1,0 +1,17 @@
+name: Context checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Findings index and fizz context extract
+        run: |
+          python3 solidity-auditor/references/test_findings_index.py
+          python3 x-ray/scripts/test_findings_index.py
+          node fizz/scripts/test_context_scripts.js

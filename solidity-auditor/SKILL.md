@@ -7,6 +7,16 @@ description: Security audit of Solidity code while you develop. Trigger on "audi
 
 You are the orchestrator of a parallelized smart contract security audit.
 
+## Lifecycle handoff
+
+`{lifecycle}=on` when the invocation names the schema `whitehexlabs.audit-findings-index/v1`, or gives a run id together with a work directory for this step. A person typing "audit" is `{lifecycle}=off`.
+
+- `{lifecycle}=on`: do not print the banner. Append one progress line per turn to `.solidity-auditor/runs/{stamp}/scan.log` and do not narrate tool output into the chat. Do not print the report. Turn 5 returns only the note from `write_findings_index.py --note` (at most 1,600 characters). Pass the invocation's run id through `--run-id`, and its index path through `--out` when it named one.
+- `{lifecycle}=off`: print the banner and the report exactly as the rest of this file says.
+- Either way, Turn 5 writes the findings index. The index is an extra file. It does not change the report, the ledger, or what the agents look for.
+
+Do not read `references/maintainer-notes.md` during a scan. It is for editors of this skill.
+
 ## Mode Selection
 
 **Exclude pattern:** skip **dependency and build directories** — `node_modules/`, `lib/`, `artifacts/`, `cache/`, `out/`, `broadcast/`, `coverage/`, `typechain*/` — and **non-production code** — `interfaces/`, `mocks/`, `test/` and files matching `*.t.sol`, `*Test*.sol` or `*Mock*.sol`.
@@ -32,7 +42,7 @@ You are the orchestrator of a parallelized smart contract security audit.
 
 - `--file-output` (off by default): **copy** the assembled report into the working directory (name per `{resolved_path}/report-formatting.md`). The flag never causes a report to be produced — every scan assembles `.solidity-auditor/runs/{stamp}/full-report.md` whether it is passed or not. It only decides whether a copy lands where the runner can see it.
 
-  > **Line 33 used to read "Never write a report file unless explicitly passed", and that is now false.** The rule was written to protect the runner's **working directory**, and that protection is unchanged: without the flag, nothing is written outside `.solidity-auditor/`. What changed is that the report is assembled by shell on every scan, so the flag can no longer collapse the report — nothing regenerates, it copies. A later editor must not read this as a mistake and revert it.
+  Without the flag, nothing is written outside `.solidity-auditor/`. The flag copies the report; it does not regenerate it. Do not go back to writing the report only when the flag is present.
 
 - `--memory` (off by default): remember findings between scans in a ledger at `.solidity-auditor/memory.tsv` in the audited repo. Any pass count above 1 turns memory on by itself, whether or not the flag was passed.
 - `--loop [N]` — the explicit pass-count override: run N passes in one scan, each pass told what the earlier ones found, ending in one combined report. `--loop` with no number is **3** passes. `--loop 1` is a 1-pass scan — the only 1-pass scan there is, now that the default is 3 (Turn 1b).
@@ -46,15 +56,11 @@ The ledger's `scans` column counts scans. The report's `seen in k/N runs` counts
 
 The pass count the scan runs is `{passes}` — settled in Turn 1b, 1 or more. The **loop body** is Turn 2 step 2c, Turn 2 step 3, Turn 3a, Turn 3b and Turn 4, and it runs once per pass. Everything before it runs once per scan, and Turn 5 closes the scan once, whatever `{passes}` is.
 
-> **HARD RULE — the 1-pass path must stay plain.** A 1-pass scan — `--loop 1`, or an explicit one-pass request; with the default at 3 there is no other route to one — reaches **none** of the memory steps: not Turn 1c, not Turn 2 step 2, not Turn 4 step 4, not Turn 4 step 6. It reads no ledger, writes no `mem_` key, and prints exactly the report it printed before memory existed. Memory is on only when `--memory` was passed or the pass count is above 1. A later editor who is tempted to make any memory step unconditional is breaking this on purpose, not tidying up.
+**HARD RULE — a 1-pass scan stays plain.** `--loop 1` (the only way to get one pass) reaches none of the memory steps: not Turn 1c, not Turn 2 step 2, not Turn 4 step 4, not Turn 4 step 6. It reads no ledger and writes no `mem_` key. Its Scope table has exactly three rows — `Mode`, `Files reviewed`, `Confidence threshold (1-100)` — and no `Passes` row, no `Memory` row, no `seen in k/N runs`, no `KNOWN` / `NEW` tag, no per-pass summary. Do not make a memory step unconditional.
 
-> **A 1-pass answer reaches none of the loop or memory machinery.** No ledger is read or written. No `Passes` or `Memory` row in the Scope table. No `seen in k/N runs`. No `KNOWN` / `NEW` tag. No per-pass summary lines. **The printed report is the report this skill printed before loop mode existed.** One pass happens only when the runner asked for it by name — there is no picker and no question, and nothing in the output records how `{passes}` was settled.
->
-> **What it does write.** Every scan writes `.solidity-auditor/runs/{stamp}/` — one `run-1.md`, one `scope.tsv`, one `queue-1.tsv`, one `full-report.md` — because the report is assembled from those files at every pass count, and `name`, `mode`, `files` and `threshold` are needed by every report. This paragraph used to say a 1-pass answer creates no `.solidity-auditor/` directory and no `runs/` files; that is now false, and it was never what the rule was protecting.
->
-> **What the rule protects, stated exactly:** on the plain path the scan reads no ledger, writes no `mem_` key, and prints a Scope table of exactly **three** rows — `Mode`, `Files reviewed`, `Confidence threshold (1-100)` — and no `Passes` row, no `Memory` row. Disk is not printed output. A later editor who makes a **memory** step unconditional is breaking this on purpose; writing the runs directory is not one of those steps.
->
-> `--memory` on a 1-pass run is the single exception: memory turns on, the loop machinery stays off.
+Every scan still writes `.solidity-auditor/runs/{stamp}/` — `run-1.md`, `scope.tsv`, `queue-1.tsv`, `full-report.md` — at every pass count. Disk is not printed output. Writing that directory is not a memory step.
+
+`--memory` on a 1-pass run is the single exception: memory turns on, the loop machinery stays off.
 
 ## Orchestration
 
@@ -95,9 +101,9 @@ If the remote VERSION fetch succeeds, compare the two as **numbers** and warn **
 
 > **Lower, not different.** A plain "differs" test warns the wrong person: somebody working on an unreleased version has a local `VERSION` **above** the published one, and gets told to upgrade to the version they are writing. Local equal to remote, or local above it, prints nothing.
 
-**Turn 1b — Pass count.** This turn settles how many passes the scan runs, from the invocation alone. **The scan never stops to ask the runner anything** — the pass question this turn used to ask, and the printed fallback that stopped and waited for an answer, were removed on purpose: a default of 3 already answers the question, and an unattended run must not block on it.
+**Turn 1b — Pass count.** This turn settles `{passes}` from the invocation alone. The scan never asks the runner anything. A default of 3 already answers, and an unattended run must not block.
 
-> **There is no model question and no pass question, and both are deliberate.** The 12 agents run on the runtime's default model — Turn 3a omits the `model` parameter on every Agent call, so whatever model the orchestrator itself runs on is what the agents use. A later editor must not add a model picker back: the agents have a safe default, and a question about them would block an unattended run to collect an answer the default already carries. The pass question is gone for the same reason — it was the runner's one interruption, and the default of 3 replaced it. A runner who wants a different count says so at invocation, and explicit numbers always win (Turn 1b-i). This turn as a whole is never skipped: the resolution rules run on every scan, even though none of them asks.
+Do not ask the runner anything, and do not add a model picker. Turn 3a omits `model` on every Agent call, including respawns, so each agent uses the model this orchestrator is already running. An explicit pass count in the invocation wins. This turn still runs on every scan.
 
 **Turn 1b-i — resolve `{passes}` from the invocation.** No question is asked, on any runtime — this table is the whole resolution:
 
@@ -113,11 +119,7 @@ An explicit number is **clamped into 1..10**: below 1 runs as 1, above 10 runs a
 
 > **The default turns memory on.** 3 is above 1, and any pass count above 1 turns memory on by itself (the `--memory` flag's own rule), so a plain invocation now reads and writes the ledger. The plain no-ledger scan still exists, by name: `--loop 1`.
 
-**Turn 1b-ii — what the count costs.** For orientation, not a promise: 1 pass ≈ 25 min, 3 passes ≈ 70 min, 5 passes ≈ 2 h.
-
-> **Two clocks are in play, and only one of them is measured.** The numbers above (`~25 min`, `~70 min`, `~2 h`) are **derived estimates for the 4-slot queue this skill now runs** — twelve agents through four slots is about three agent-times end to end, not one — and they are not measurements. The measurement below was taken with **all twelve agents running at once**, a width this skill no longer uses; read it as the per-agent speed and the floor, not as the wall clock to expect. When a real 4-slot scan completes, re-measure and correct both clocks here rather than adding a third estimate somewhere else.
->
-> **The measurement, and it is a floor.** A real 3-pass scan of 2,228 lines of Solidity across 10 files, 12 agents per pass on Opus **all running at once**, took **43 minutes** wall clock: 11 minutes for pass 1 and about 16 for each of passes 2 and 3, which run slower because the growing `known-findings.md` is appended to all twelve bundles. Individual agents ran 3.5–11 minutes. A larger codebase takes longer; a smaller model is faster. Quote minutes rather than multipliers — "~3x time" told the runner nothing about whether to wait or come back after lunch.
+**Turn 1b-ii — what the count costs.** For orientation, not a promise: 1 pass ≈ 25 min, 3 passes ≈ 70 min, 5 passes ≈ 2 h, on the 4-slot queue. Quote those minutes. Do not invent a second estimate. The measured floor (all twelve agents at once, not this queue) is in `references/maintainer-notes.md` and is not loaded during a scan.
 
 **Turn 1b-iii — record the pass count.** However `{passes}` was settled — an explicit number from the invocation, or the default of 3 — write it once, here:
 
@@ -155,13 +157,9 @@ This is the `P` in the Scope table's `Passes` row. The `R` — how many passes a
 
    The vocabulary is what keeps exact key matching honest: a bug class is a label written in words, so the same bug re-labelled is a second record and memory fails silently. Handing the existing labels back is how the same bug keeps the same key.
 
-**Turn 2 — Prepare.** In one message, make parallel tool calls: (a) Read `{resolved_path}/report-formatting.md`, (b) Read `{resolved_path}/judging.md`, (c) Read `{resolved_path}/agent-prompts.md`, (d) Read `{resolved_path}/report-language.md`.
+**Turn 2 — Prepare.** Do not Read `report-formatting.md`, `judging.md`, `agent-prompts.md`, or `report-language.md` in this turn. `agent-prompts.md` is read once at Turn 3a, when the prompts are filled in. The other three are read once at the start of Turn 4, when the pass writes finding blocks. `report-language.md` is also inside every agent bundle, so the agents already have it. Loading those four files here only makes them sit in this context while the queue runs.
 
-> **Why `report-formatting.md` is still read, now that nothing here composes a report.** It is the shape Turn 4 step 5a writes each finding in — title line, location line, Description, diff Fix block — and the assembler pastes those bytes straight through. Read it as the contract the finding blocks meet, not as a template to imitate at the end.
-
-> **`report-language.md` is read for the same reason, one level down.** `report-formatting.md` settles the **shape** of a finding block; `report-language.md` settles the **words inside it**. Turn 4 step 5a writes the title and the Description, the assembler pastes them through unchanged, so those bytes are the last chance to write a sentence a developer can act on. It is Simplified Technical English (ASD-STE100), and it is not optional styling: a finding the developer cannot read is a finding they do not fix. The same file is in every agent bundle, so the sentence the pass writes and the sentence the agent handed it obey one rule.
-
-Then build `source.md`, run the memory step, and only then cat the bundles — in that order, because the bundles carry a file the memory step writes:
+Build `source.md`, run the memory step, and only then cat the bundles — in that order, because the bundles carry a file the memory step writes:
 
 > **Turn 2 is split across the loop.** Step 1 runs **once per scan**: `source.md` provably cannot change between passes — one git SHA for the whole loop, no pruning between them — and it is the expensive half of the build. Step 2c and step 3 run **once per pass**, because only they carry the knowns, and re-catting twelve bundles from files already on disk is one Bash command. Steps 2a and 2b run once per scan with step 1, since both read that frozen source.
 >
@@ -300,7 +298,7 @@ photocopy, as above. A multi-pass scan rebuilds `known-findings.md` from the fre
 of pass K+1 read what pass K found as ground already walked. That is the whole point of
 passing memory down a loop; the command does not change, only the file it is pointed at.
 
-Print line counts for every bundle and `source.md`. Do NOT inline source code into the Agent call prompt itself.
+Print line counts for every bundle and `source.md` with `wc -l`. Do NOT inline source code into the Agent call prompt. Do NOT Read `source.md` or any `agent-N-bundle.md` into this context. The agents read their own bundle; this context does not read it again. A later pass reuses the same `source.md` on disk. Do not rebuild it.
 
 **Turn 3a — Open the queue, launch the first four.** Runs **every pass**. The 12 agents are a **queue in agent-number order** run through **4 slots** — 2 for the rest of a pass after a stall death, see Turn 3b: never more agents RUNNING at once than the slots allow, and never an idle slot while a PENDING agent remains. This turn opens the window; Turn 3b keeps it full.
 
@@ -344,14 +342,14 @@ Print line counts for every bundle and `source.md`. Do NOT inline source code in
 
 Agents 1–9 use the **single-specialty prompt** (Turn 3a-i). Agents 10–12 use the **gap-hunter prompt** (Turn 3a-ii).
 
-**Turn 3a-i — Single-specialty prompt (agents 1–9).** Use the template under "Single-specialty prompt" in `{resolved_path}/agent-prompts.md`, substituting `{bundle_dir}`, the agent number and the bundle line count.
+**Turn 3a-i — Single-specialty prompt (agents 1–9).** Read `{resolved_path}/agent-prompts.md` once, here, if it is not already in context. Use the template under "Single-specialty prompt", substituting `{bundle_dir}`, the agent number and the bundle line count.
 
 **Turn 3a-ii — Gap-hunter prompt (agents 10–12).** Use the template under "Gap-hunter prompt" in the same file.
 
 Three rules that file carries, repeated here because they are conditions and not text:
 
 - The **"Known findings"** paragraph is included **only when memory is on and `known-findings.md` was appended**. On a plain scan the prompt is byte-identical to the one it has always been — a paragraph about a section that is not there would send agents hunting for it.
-- The **READ-ONLY** paragraph is **unconditional** — every agent, every mode, every pass. A real scan proved it necessary: an agent built Foundry proof-of-concept files inside the audited repository and deleted them afterwards. It left the tree clean and the stored SHA honest, and it was still wrong. A later editor must not make it conditional, and must not soften it into a preference. Its single exception — the checkpoint file — is part of the unconditional text, not a loophole to widen.
+- The **READ-ONLY** paragraph is **unconditional** — every agent, every mode, every pass. Do not make it conditional and do not soften it. Its single exception is the checkpoint file, and that exception is not a second scratch file.
 - The **checkpoint** paragraph is **unconditional** too — every agent, every mode, every pass. It is what makes a mid-sweep agent death recoverable instead of a total loss, and it is why Turn 4 collects findings from the checkpoint files and not from the agents' final messages.
 
 **Runtimes with no Agent tool — detached headless sessions.** The queue, the events and the checkpoint rules above are the contract; the Agent tool is just one transport. On a runtime that gives the orchestrator no Agent tool, launch each agent as a detached headless session of the host CLI (e.g. `zcode -p <prompt-file> --mode yolo > stdout.log 2>&1 &`), treat each session as the background task the heartbeat waits on, and mark the queue exactly as step 4 prescribes. Two rules that transport carries, learned from a real scan where a first wave died empty:
@@ -405,7 +403,7 @@ On both: `TaskStop` the agent, log `taskstop`, mark its line `FAILED`, log `watc
 
 - **Respawn count `1` → the loss is real.** The replacement died too; nothing is respawned a second time. Record the loss in all three places, or it is a silent coverage loss: the pass summary line (Turn 4 step 5b), the `run-K.md` header, and the report's `Passes` row.
 
-This rule replaced an older one — *never respawn the dead task, a death costs coverage but not wall-clock* — and the replacement is deliberate. The old rule assumed a retry replays the agent from zero for an unbounded wait, and the checkpoint inverted the assumption: a replacement starts from everything its predecessor wrote. A real scan in September 2026 made it concrete — three agents dead of stalled model streams after hours of client retries, three replacements dispatched, all three finished. A respawn now costs minutes and keeps the twelfth of the coverage. The bound stays: **one** respawn per agent per pass. A second death is a pattern, not bad luck, and the loop's next pass — not another retry — is what covers it.
+One respawn per agent per pass. A second death is not retried: the next pass covers it. Do not go back to "never respawn".
 
 **When the death was a `stall-death`** — the client reported the model stream itself stalled — append a `narrow` event and refill to 2 slots for the rest of the pass; step 3 reads the width back from the events file. A stalled stream is upstream evidence, and two fewer simultaneous long-thinking streams lower the odds of the next stall. Narrow once per pass — 2 is the floor — and only `stall-death` triggers it: a watchdog kill or an `other-death` does not.
 
@@ -426,19 +424,35 @@ printf '%s\t%s\n' pass_{K}_failed 1 >> .solidity-auditor/runs/{stamp}/scope.tsv
 
 **Steps 4 and 6 are SKIPPED entirely when memory is off.** Every other step runs at any pass count.
 
-Follow `{resolved_path}/dedup-and-assembly.md`, section **"Turn 4"**, step by step.
+At the start of this turn, Read `{resolved_path}/report-formatting.md`, `{resolved_path}/judging.md`, and `{resolved_path}/report-language.md` once each, if they are not already in context. Do not read them earlier, and do not read them again on a later pass.
+
+Follow `{resolved_path}/dedup-and-assembly.md`, section **"Turn 4"**, step by step. The first pass already read that file while the queue was running. Later passes do not read it again.
 
 Then, after the loop body has run `{passes}` times (or stopped early), go to Turn 5 once.
 
 **Turn 5 — Assemble, print, clean.** Runs **once per scan**, at any pass count, including a 1-pass scan and including a loop that stopped early. There is no path where a scan ends without this turn.
 
-**This turn holds no model judgment.** It copies two files, runs `assemble.sh`, counts with `awk`, and prints. `assemble.sh` is the only producer of a report in this skill: do not re-word its output, do not re-order it, do not add to it and do not summarise it in your own words. If this turn looks too thin to be a reporting step — that is the point, and `dedup-and-assembly.md` records why.
+**This turn holds no model judgment.** It copies two files, runs `assemble.sh`, runs `write_findings_index.py`, counts with `awk`, and prints. `assemble.sh` is the only producer of a report in this skill: do not re-word its output, do not re-order it, do not add to it and do not summarise it in your own words. Do not hand-write the findings index either. If this turn looks too thin to be a reporting step — that is the point, and `dedup-and-assembly.md` records why.
 
 Follow `{resolved_path}/dedup-and-assembly.md`, section **"Turn 5"**, step by step. Its step 1 is SKIPPED when memory is off; its step 4 runs only when `--file-output` was passed.
 
+**Findings index, after `assemble.sh` and before `rm -rf {bundle_dir}`.** The checkpoints still exist at that moment, and `proof:` lines that never entered the run file are copied from them. The script copies every body in full. Do not edit the JSON afterwards and do not paste it into the chat.
+
+```bash
+python3 {resolved_path}/write_findings_index.py \
+  --dir .solidity-auditor/runs/{stamp} \
+  --run-id "{run_id}" \
+  --target "{project-name}" \
+  --checkpoints {bundle_dir}
+```
+
+Add `--out "{index_path}"` when the invocation named an index path. `{run_id}` is the lifecycle run id when `{lifecycle}=on`, otherwise `{stamp}`. If `python3` is missing, append `findings index skipped: python3 missing` to `scan.log` and do not compose the JSON yourself.
+
+When `{lifecycle}=on`, add `--note` and make the final message exactly that stdout. Do not print the report, the banner, or a finding body. When `{lifecycle}=off`, do not pass `--note`; print the report as Turn 5 already says.
+
 ## Banner
 
-Before doing anything else, print this exactly:
+When `{lifecycle}=off`, before doing anything else, print this exactly. When `{lifecycle}=on`, skip it.
 
 ```
 

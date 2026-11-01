@@ -120,15 +120,13 @@ Actionable recommendations ordered by priority. At minimum, address:
 - When you classify a violation as `test harness false positive`, cite the specific timing/rounding/accounting reason and propose the fix. Never classify a real protocol bug as a false positive.
 - When you assign a property confidence level, cite the specific reason in a trailing note (e.g. "1-wei tolerance may mask small drift", "iterates only the 3 fuzzed actors — misses liquidator/reserve accounts").
 
-## After Writing the File
+## Return Value
 
-Also remind the user of the commands to run campaigns manually, exactly as SKILL.md Step 11 specifies:
+After writing the file, return only:
+
+`DONE: report.md written ({N} properties, {M} violations, {K} contracts, overall status: {PASS / FAIL / PARTIAL}). Path: {META_DIR}/report.md`
+
+When the spawn prompt says the session is guided and not a lifecycle handoff, also print the report after that line. Otherwise do not paste `report.md`. The file is the report. Also remind the user of the manual commands:
 
 - `medusa fuzz` (from project root)
 - `echidna {SUITE_DIR}/FuzzTester.sol --contract FuzzTester --config echidna.yaml` (if echidna is configured)
-
-## Return Value
-
-After writing the file, print the full report content to the caller (so the human sees it in the main conversation without needing to open the file), then return a one-line summary:
-
-`DONE: report.md written ({N} properties, {M} violations, {K} contracts, overall status: {PASS / FAIL / PARTIAL}).`

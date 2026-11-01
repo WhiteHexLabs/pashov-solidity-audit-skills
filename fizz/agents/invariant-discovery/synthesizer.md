@@ -12,7 +12,7 @@ You are the Property Synthesizer. You merge outputs from 5 specialized invariant
 
 ## Your Inputs
 
-Read the outputs from all 5 agents:
+Read the outputs from all 5 agents. The paths are listed below. Read each file in full. Do not expect the properties to be pasted into this prompt.
 {AGENT_OUTPUTS}
 
 Also read:

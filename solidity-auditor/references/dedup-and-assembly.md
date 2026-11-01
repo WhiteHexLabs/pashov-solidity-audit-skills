@@ -162,7 +162,7 @@ Then, after the loop body has run `{passes}` times (or stopped early), go to Tur
 
    **Write the Description and the diff Fix block here, in full.** This is the expensive per-finding writing, and it is paid **now**, in the pass that found the bug, while that pass still has context to spare. Turn 5 re-words nothing — it pastes these bytes into the report. An orchestrator drafting seventy findings at the end of a long scan is the failure this ordering exists to prevent.
 
-   **The title and the Description are written in Simplified Technical English**, per `{resolved_path}/report-language.md`, which Turn 2 read. Because Turn 5 re-words nothing, this is the **only** step where the report's sentences can be made readable — there is no later cleanup pass and there must never be one. Four pieces of text obey that file: the title, the Description, the Lead description, and the Lead's code-smell list.
+   **The title and the Description are written in Simplified Technical English**, per `{resolved_path}/report-language.md`. Read that file at the start of Turn 4 if it is not already in context. Do not read it during Turn 2, and do not read it again on a later pass. Because Turn 5 re-words nothing, this is the **only** step where the report's sentences can be made readable — there is no later cleanup pass and there must never be one. Four pieces of text obey that file: the title, the Description, the Lead description, and the Lead's code-smell list.
 
    Three things it does **not** reach, and a later editor must not extend it to them: the **diff** inside the Fix block, which is pasted verbatim from the agent, the **bug-class label** in the `key` attribute, which is a memory key and is chosen by step 1 and step 4a, and the **identifiers** on the location line, which are spelled as the source spells them. Softening a label to read better writes a second ledger record for one bug.
 
@@ -353,9 +353,9 @@ Then, after the loop body has run `{passes}` times (or stopped early), go to Tur
 
    **The trigger is more than 20 findings** — `F` alone. Leads are excluded, so a scan with 18 findings and 40 leads still prints in full.
 
-   a. **`F` is 20 or fewer — print `full-report.md` word for word.** Every byte, nothing added, nothing cut, no preface. This is the path a plain scan of a small contract takes, and its printed bytes are exactly what this skill printed before any of this existed.
+   a. **`F` is 20 or fewer — and `{lifecycle}=off` — print `full-report.md` word for word.** Every byte, nothing added, nothing cut, no preface. This is the path a plain scan of a small contract takes, and its printed bytes are exactly what this skill printed before any of this existed. When `{lifecycle}=on`, do not print the file. The file on disk is the report. SKILL.md Turn 5 returns the index script's note instead.
 
-   b. **`F` is above 20 — print this instead**, and nothing else:
+   b. **`F` is above 20 — and `{lifecycle}=off` — print this instead**, and nothing else. When `{lifecycle}=on`, print neither this slice nor the report. The full file stays on disk and the index script's note is the return.
 
    ````markdown
    # 🔐 Security Review — {project-name}
