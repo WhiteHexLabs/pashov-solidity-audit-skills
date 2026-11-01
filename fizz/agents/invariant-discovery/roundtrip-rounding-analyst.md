@@ -19,10 +19,12 @@ For every pair of inverse operations and every conversion function, verify:
 
 
 ## INVARIANT_CONTEXT
-{INVARIANT_CONTEXT}
+Read this file in full. It is not pasted below.
+{CONTEXT_PATH}
 
-## Read the source code of these target contracts:
-{FILE_PATHS}
+## Source files
+Read every path in this list, once. Do not read other production sources unless a name you need is defined in an import those files pull in; then read that one file only.
+{FILE_LIST_PATH}
 
 ## Step 1: Identify ALL Paired Operations
 
@@ -162,3 +164,8 @@ RATIONALE: [why this matters]
 ```
 
 SCOPE: Write ONLY round-trip and rounding properties. Do NOT write conservation, state machine, or attack properties.
+
+## Return
+Write every property block, in full, to {OUTPUT_PATH}. Do not shorten a block and do not paste the blocks into the return message.
+Your final message is only:
+`DONE: {OUTPUT_PATH} properties=<N> should_hold=<M>`

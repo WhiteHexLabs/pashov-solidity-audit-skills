@@ -93,18 +93,6 @@ The `group_key` enables deduplication: `ContractName | functionName | bug_class`
 
 ## Language — MANDATORY
 
-**Your `description:` and your `fix:` sentence are written in Simplified Technical English.** The
-rules follow these ones in your bundle, under the heading "Report language". Read them, and
-obey them in every finding and every lead you emit.
+The next section of this bundle is "Report language". Obey it for every `description:` and every `fix:` sentence. One sentence, twenty-five words or fewer, active voice, no `-ing` clause, no metaphor. Name who acts and what they get. Nothing downstream rewrites the sentence.
 
-Your `description:` is what the report prints. Nothing downstream rewrites it into plain
-English for you — the orchestrator pastes it into the report and the report goes to the
-developer who must fix the code. One sentence, twenty-five words or fewer, active voice, no
-`-ing` clause, no metaphor. Name who acts and what they get.
-
-The rule reaches the wording and never the data. Your `bug_class` label, your `group_key`, the
-contract and function names, and every line of code you quote are written exactly as the
-source and the dedup rules require. `report-language.md` says which is which.
-
-Your `path:` and `proof:` fields are working notes, not report text. Keep them concrete;
-concrete is already plain.
+`bug_class`, `group_key`, contract and function names, and quoted code are data. Copy them exactly. `path:` and `proof:` are working notes: keep them concrete, and do not shorten `proof:` to save space. The rules for which is which are in the Report language section. Do not re-read this bundle to find them.

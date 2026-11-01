@@ -9,6 +9,14 @@ Generate a stateful Solidity fuzz suite under `{SUITE_DIR}` (default: `test/fizz
 
 Use `Echidna` and `Medusa` for invariant campaigns. Use `Foundry` for compilation, smoke testing, and quick debugging.
 
+## Lifecycle handoff
+
+`{lifecycle}=on` when the invocation names `whitehexlabs.audit-findings-index/v1`, or gives a run id together with a work directory. A person running fizz is `{lifecycle}=off`.
+
+- On: skip the banner. Do not paste campaign logs or `report.md` into the chat. After Step 11, the final message is the note from `write_findings_index.js --note`.
+- Off: the banner and the guided-mode report print stay.
+- Either way Step 11 writes `{META_DIR}/findings-index.json` from the violation JSON files. Each file is stored in full. A violated SHOULD-HOLD property is `kind: finding`. Anything else is a lead. No violations produces an empty `findings` array, which is a successful run.
+
 ## Workflow Rules
 
 - Follow the steps in order. Do not skip forward if a required artifact for the current step does not exist yet.
@@ -61,7 +69,7 @@ Every subsequent spawn instruction below references `{AGENT_MODEL}` — substitu
 
 ## Step 0: Print Banner
 
-At the start of every skill run, **first** print this ASCII banner once before any other output — including any selection prompt:
+At the start of every skill run, **first** print this ASCII banner once before any other output — including any selection prompt. When `{lifecycle}=on`, skip the banner.
 
 ```text
 
@@ -74,7 +82,7 @@ At the start of every skill run, **first** print this ASCII banner once before a
                                 
 ```
 
-After the banner, resolve `{MODE}` per the "Run Mode" section and `{AGENT_MODEL}` per the "Subagent Model" section. For any value still unresolved from invocation flags, ask the user via a single `AskUserQuestion` tool call containing only the unresolved questions (skip the call entirely if both were resolved from flags).
+After the banner, resolve `{MODE}` per the "Run Mode" section and `{AGENT_MODEL}` per the "Subagent Model" section. When `{lifecycle}=on`, do not ask: unresolved mode is `automatic` and unresolved model is `sonnet`. For any value still unresolved from invocation flags and `{lifecycle}=off`, ask the user via a single `AskUserQuestion` tool call containing only the unresolved questions (skip the call entirely if both were resolved from flags).
 
 **Output discipline (mandatory)**: Between the banner block and the `AskUserQuestion` invocation, emit **no user-facing text whatsoever** — no "I'll ask about…", no "loading the tool…", no acknowledgement that flags were missing. If `AskUserQuestion`'s schema needs to be fetched via `ToolSearch` first, do that silently as well. The user should see banner → selection UI → resolved-values lines, with nothing in between. This overrides the default behavior of narrating intent before tool calls.
 
@@ -94,7 +102,7 @@ Map the user's selections back to `{MODE}` (`automatic` / `guided`) and `{AGENT_
 
 Run sequentially:
 
-1. Read [template-map.md](./references/template-map.md).
+1. Do not read `template-map.md` yet. Step 6 reads it, once the scaffold exists.
 2. Run `forge --version`.
 3. If `forge --version` fails, tell the user that Foundry is missing and suggest installing it using the official documentation:
    Foundry install guide: `https://www.getfoundry.sh/introduction/installation`
@@ -408,33 +416,36 @@ This is the make-or-break step. It uses **5 specialized discovery agents in para
 
 ### Step 9a: Build Invariant Context
 
-Read [property-generation.md](./references/property-generation.md), then build `INVARIANT_CONTEXT` by reading:
+Read [property-generation.md](./references/property-generation.md) now, not earlier.
 
-- the invariant notes captured in Step 3 from `{PROJECT_ROOT}/x-ray/x-ray.md` when available, otherwise `{PROJECT_ROOT}/{META_DIR}/protocol-understanding.md`
-- `{PROJECT_ROOT}/{META_DIR}/additional-context.md` if it exists (guided-mode supplementary docs/links from Step 3)
-- all in-scope source files
-- `Base.sol`, `Snapshots.sol`, `Properties.sol`
-- all generated handler files
+Do not Read the protocol source again in this step. Step 3 already read the x-ray notes when they existed. A script writes the shared extract and the file list. The script's stdout is two paths. Do not Read `invariant-context.md` into this context; the discovery agents read it.
 
-Extract from the codebase:
-- **AGGREGATE_VARIABLES**: grep for variables named `total*`, `sum*`, `accumulated*`, or any variable that multiple functions write to
-- **PAIRED_OPERATIONS**: match function pairs (deposit/withdraw, mint/burn, add/remove, lock/unlock, open/close, stake/unstake, borrow/repay, create/destroy, join/exit)
-- **CONVERSION_FUNCTIONS**: grep for `convertTo*`, `preview*`, `toAssets`, `toShares`, or any function mapping between two unit systems
-- **ACCESS_CONTROL**: grep for `onlyOwner`, `onlyAdmin`, `onlyRole`, `require(msg.sender`, custom role modifiers
+```bash
+node {SKILL_PATH}/scripts/build_invariant_context.js {PROJECT_ROOT} --meta-dir {META_DIR} --suite-dir {SUITE_DIR}
+```
+
+That writes:
+
+- `{PROJECT_ROOT}/{META_DIR}/invariant-context.md` — every line that matches the aggregate, conversion, access-control, and paired-function patterns, plus pointers to `x-ray/` when it exists. Matching lines are not sampled.
+- `{PROJECT_ROOT}/{META_DIR}/scope-files.txt` — protocol sources under the Foundry `src` (or `src/`, `contracts/`, `script/`) and the harness files (`Base.sol`, `Snapshots.sol`, `Properties.sol`, `handlers/`). Dependencies, build output, and tests are not in the list.
 
 ### Step 9b: Spawn 5 Discovery Agents in Parallel
 
 **CRITICAL**: All 5 agents MUST be spawned in a SINGLE message (one tool call per agent, all in the same response).
 
-| Agent | File | Discovery Approach |
-|-------|------|-------------------|
-| 1. Conservation Auditor | `{SKILL_PATH}/agents/invariant-discovery/conservation-auditor.md` | Sum-of-parts = tracked-whole for every aggregate variable |
-| 2. Round-Trip & Rounding Analyst | `{SKILL_PATH}/agents/invariant-discovery/roundtrip-rounding-analyst.md` | Forward+inverse operations, directional rounding |
-| 3. State Transition Mapper | `{SKILL_PATH}/agents/invariant-discovery/state-transition-mapper.md` | Postconditions, monotonicity, entity counts, state machine |
-| 4. Adversarial Profit Maximizer | `{SKILL_PATH}/agents/invariant-discovery/adversarial-profit-maximizer.md` | Attacker thinking — DoS, value extraction, edge states |
-| 5. Protocol-Type Specialist | `{SKILL_PATH}/agents/invariant-discovery/protocol-type-specialist.md` | Auto-detect type, apply domain templates (vault/lending/AMM/etc.) |
+| Agent | File | Discovery Approach | Output |
+|-------|------|-------------------|--------|
+| 1. Conservation Auditor | `{SKILL_PATH}/agents/invariant-discovery/conservation-auditor.md` | Sum-of-parts = tracked-whole for every aggregate variable | `{META_DIR}/discovery/conservation.md` |
+| 2. Round-Trip & Rounding Analyst | `{SKILL_PATH}/agents/invariant-discovery/roundtrip-rounding-analyst.md` | Forward+inverse operations, directional rounding | `{META_DIR}/discovery/roundtrip.md` |
+| 3. State Transition Mapper | `{SKILL_PATH}/agents/invariant-discovery/state-transition-mapper.md` | Postconditions, monotonicity, entity counts, state machine | `{META_DIR}/discovery/state.md` |
+| 4. Adversarial Profit Maximizer | `{SKILL_PATH}/agents/invariant-discovery/adversarial-profit-maximizer.md` | Attacker thinking — DoS, value extraction, edge states | `{META_DIR}/discovery/adversarial.md` |
+| 5. Protocol-Type Specialist | `{SKILL_PATH}/agents/invariant-discovery/protocol-type-specialist.md` | Auto-detect type, apply domain templates (vault/lending/AMM/etc.) | `{META_DIR}/discovery/protocol-type.md` |
 
-Read each agent file, replace `{INVARIANT_CONTEXT}` and `{FILE_PATHS}` with actual values, spawn as `general-purpose` agent with `model: "{AGENT_MODEL}"`.
+`mkdir -p {PROJECT_ROOT}/{META_DIR}/discovery` before spawning.
+
+Read each agent file once. Replace `{CONTEXT_PATH}` with the absolute path of `invariant-context.md`, `{FILE_LIST_PATH}` with the absolute path of `scope-files.txt`, and `{OUTPUT_PATH}` with that agent's output path. Do not paste the context, the file list's contents, or the source into the prompt. Spawn as `general-purpose` with `model: "{AGENT_MODEL}"`.
+
+Each agent reads the context file and every path in the file list, once, and writes every property block to `{OUTPUT_PATH}` in full. Its return message is only `DONE: {OUTPUT_PATH} properties=<N> should_hold=<M>`. Do not ask it to paste the properties. The five lenses still each see the whole list: narrowing the list by lens would drop a file another lens's pattern only notices in the source. Do not add that narrowing.
 
 ### Step 9c: Synthesize Property Plan
 
@@ -444,7 +455,8 @@ After all 5 agents return, read the Synthesizer agent file:
 |-------|------|
 | 6. Synthesizer | `{SKILL_PATH}/agents/invariant-discovery/synthesizer.md` |
 
-Replace `{AGENT_OUTPUTS}` with the outputs from agents 1-5, `{META_DIR}` with the actual `{META_DIR}` path, `{PROJECT_ROOT}` with the actual `{PROJECT_ROOT}` path, and `{SUITE_DIR}` with the actual `{SUITE_DIR}` path, then spawn as `general-purpose` agent with `model: "{AGENT_MODEL}"`.
+Replace `{AGENT_OUTPUTS}` with the five absolute discovery-file paths (one per line, the files, not their contents), `{META_DIR}` with the actual `{META_DIR}` path, `{PROJECT_ROOT}` with the actual `{PROJECT_ROOT}` path, and `{SUITE_DIR}` with the actual `{SUITE_DIR}` path, then spawn as `general-purpose` agent with `model: "{AGENT_MODEL}"`.
+The Synthesizer reads those five files itself. Do not paste them into its prompt.
 The Synthesizer merges, deduplicates, prioritizes, and writes BOTH:
 - `{PROJECT_ROOT}/{META_DIR}/property-plan.md` — implementation tables with stable Spec IDs (`GL-NN`, `SP-NN`)
 - `{PROJECT_ROOT}/PROPERTIES.md` — English-language spec with `[ ]` checkboxes, one entry per property, identified by the same Spec IDs. This is the artifact that the `/fizz-convert` command and the implementers in Step 9d operate on.
@@ -570,7 +582,7 @@ After validation succeeds, spawn the Report Writer subagent to synthesize the fi
 
 The agent reads the campaign outputs (coverage, corpus, `medusa-run.log`, `PROPERTIES.md`, `Properties.sol`, handler files, open TODOs) and writes `{PROJECT_ROOT}/{META_DIR}/report.md`.
 
-The report-writer agent will also print the report content to the conversation (so the user sees it inline) and remind the user of the commands to run campaigns manually:
+When `{MODE} = "guided"` and `{lifecycle} = "off"`, the report-writer also prints the report after writing it, because a person is at the keyboard. Otherwise it returns only the one-line summary and the path. The file is the full report either way. It also reminds the user of the commands to run campaigns manually:
 
 - `medusa fuzz` (from project root)
 - `echidna . --contract FuzzTester --config echidna.yaml`
@@ -590,3 +602,13 @@ node {SKILL_PATH}/scripts/fizz_sync.js {PROJECT_ROOT} --refresh-snapshot --meta-
 ```
 
 This writes `{PROJECT_ROOT}/{META_DIR}/last-run.json` — a hash+signature snapshot of the in-scope contracts, handlers, and `PROPERTIES.md` entries. Later, when the user modifies sources and invokes `/fizz-sync`, that skill diffs against this file to detect added/removed/changed functions, quarantine stale properties, and regenerate only the drifted handler stubs.
+
+### Findings index
+
+After the snapshot, write the index. It does not change the suite.
+
+```bash
+node {SKILL_PATH}/scripts/write_findings_index.js {PROJECT_ROOT} --meta-dir {META_DIR} --run-id "{run_id}" --target "{project-name}"
+```
+
+`{run_id}` is the lifecycle run id when `{lifecycle}=on`, otherwise the UTC timestamp. Add `--out "{index_path}"` when the invocation named one. Add `--note` only when `{lifecycle}=on`, and return exactly that stdout. If node is missing, write `findings index skipped: node missing` into `{META_DIR}/scan.log` and do not compose the JSON yourself.

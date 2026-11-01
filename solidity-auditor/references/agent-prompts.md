@@ -6,8 +6,7 @@ single-specialty prompt; agents 10–12 get the gap-hunter prompt.
 Both are verbatim text with values substituted in. Substitute `{bundle_dir}`,
 the agent number `N`, and the bundle's real line count. Change nothing else.
 
-The orchestrator reads this file in **Turn 2**, in the same parallel message
-that reads `report-formatting.md` and `judging.md`.
+The orchestrator reads this file in **Turn 3a**, once, when it fills in the prompts. It does not read it during Turn 2.
 
 ---
 
